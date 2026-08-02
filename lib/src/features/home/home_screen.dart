@@ -1,6 +1,7 @@
 // lib/src/features/home/home_screen.dart
 import 'package:flutter/material.dart';
 import '../../models/shop.dart';
+import '../../services/post_service.dart';
 import '../../services/shop_service.dart';
 import '../shop/shop_detail_screen.dart';
 import './shop_map_screen.dart';
@@ -20,10 +21,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   String? _errorMessage;
 
+  // shopId -> 매장 최신 게시물의 대표 이미지 URL (없으면 아이콘으로 대체 표시)
+  Map<int, String> _shopThumbnails = {};
+
   @override
   void initState() {
     super.initState();
     _loadShops();
+    _loadThumbnails();
   }
 
   // 실제 백엔드 DB에서 매장 목록을 동기화
@@ -45,6 +50,25 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  // 매장 카드에 쓸 대표 이미지를 매장별 최신 게시물에서 뽑아온다.
+  // 실패하거나 게시물이 없어도 카드가 아이콘으로 정상 표시되므로 조용히 무시한다.
+  Future<void> _loadThumbnails() async {
+    try {
+      final posts = await PostService.getPosts(); // 최신순 정렬로 내려옴
+      final thumbnails = <int, String>{};
+      for (final post in posts) {
+        if (post.imageUrl != null &&
+            post.imageUrl!.isNotEmpty &&
+            !thumbnails.containsKey(post.shopId)) {
+          thumbnails[post.shopId] = post.imageUrl!;
+        }
+      }
+      if (mounted) setState(() => _shopThumbnails = thumbnails);
+    } catch (_) {
+      // 썸네일은 부가 정보라 실패해도 목록 자체는 계속 보여준다.
     }
   }
 
@@ -139,6 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 itemCount: _filteredShops.length,
                 itemBuilder: (context, index) {
                   final shop = _filteredShops[index];
+                  final thumbnailUrl = _shopThumbnails[shop.shopId];
 
                   return Card(
                     margin: const EdgeInsets.symmetric(
@@ -146,11 +171,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       vertical: 8,
                     ),
                     elevation: 2,
+                    clipBehavior: Clip.antiAlias,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -159,71 +184,75 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         );
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 매장 대표 아이콘 (DB에 매장 이미지 필드가 없어 아이콘으로 대체)
-                            Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: Colors.indigo[50],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.store,
-                                color: Colors.indigo,
-                                size: 32,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 매장 대표 이미지 (매장 게시물의 최신 사진, 없으면 아이콘 플레이스홀더)
+                          AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: thumbnailUrl != null
+                                ? Image.network(
+                                    thumbnailUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        _shopThumbnailPlaceholder(),
+                                  )
+                                : _shopThumbnailPlaceholder(),
+                          ),
 
-                            // 매장 정보 텍스트 영역
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    shop.shopName,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                          // 매장 정보 텍스트 영역
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  shop.shopName,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    shop.baseAddress,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey[600],
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  shop.baseAddress,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[600],
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '뿌리 ${shop.rootPrice}원 · 전체 ${shop.fullPrice}원',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.redAccent,
-                                    ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '뿌리 ${shop.rootPrice}원 · 전체 ${shop.fullPrice}원',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.redAccent,
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   );
                 },
               ),
             ),
+    );
+  }
+
+  Widget _shopThumbnailPlaceholder() {
+    return Container(
+      color: Colors.indigo[50],
+      child: const Center(
+        child: Icon(Icons.store, color: Colors.indigo, size: 40),
+      ),
     );
   }
 }

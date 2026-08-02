@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import '../../models/shop.dart';
+import '../../services/post_service.dart';
 import '../shop/shop_detail_screen.dart';
 
 // 매장이 하나도 없을 때 지도가 띄울 기본 좌표 (대구 중구)
@@ -25,6 +26,33 @@ class ShopMapScreen extends StatefulWidget {
 
 class _ShopMapScreenState extends State<ShopMapScreen> {
   NaverMapController? _mapController;
+
+  // shopId -> 매장 최신 게시물의 대표 이미지 URL (없으면 아이콘으로 대체 표시)
+  Map<int, String> _shopThumbnails = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThumbnails();
+  }
+
+  // 실패해도 지도/카드 자체는 아이콘으로 정상 표시되므로 조용히 무시한다.
+  Future<void> _loadThumbnails() async {
+    try {
+      final posts = await PostService.getPosts(); // 최신순 정렬로 내려옴
+      final thumbnails = <int, String>{};
+      for (final post in posts) {
+        if (post.imageUrl != null &&
+            post.imageUrl!.isNotEmpty &&
+            !thumbnails.containsKey(post.shopId)) {
+          thumbnails[post.shopId] = post.imageUrl!;
+        }
+      }
+      if (mounted) setState(() => _shopThumbnails = thumbnails);
+    } catch (_) {
+      // no-op
+    }
+  }
 
   NLatLng get _initialCenter {
     if (widget.shops.isEmpty) return _fallbackCenter;
@@ -102,6 +130,7 @@ class _ShopMapScreenState extends State<ShopMapScreen> {
               itemCount: widget.shops.length,
               itemBuilder: (context, index) {
                 final shop = widget.shops[index];
+                final thumbnailUrl = _shopThumbnails[shop.shopId];
                 return Container(
                   width: MediaQuery.of(context).size.width * 0.8,
                   margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -115,14 +144,20 @@ class _ShopMapScreenState extends State<ShopMapScreen> {
                       onTap: () => _focusShop(shop),
                       child: ListTile(
                         contentPadding: const EdgeInsets.all(10),
-                        leading: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            color: Colors.indigo[50],
-                            borderRadius: BorderRadius.circular(6),
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: SizedBox(
+                            width: 60,
+                            height: 60,
+                            child: thumbnailUrl != null
+                                ? Image.network(
+                                    thumbnailUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        _shopThumbnailPlaceholder(),
+                                  )
+                                : _shopThumbnailPlaceholder(),
                           ),
-                          child: const Icon(Icons.store, color: Colors.indigo),
                         ),
                         title: Text(
                           shop.shopName,
@@ -159,6 +194,13 @@ class _ShopMapScreenState extends State<ShopMapScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _shopThumbnailPlaceholder() {
+    return Container(
+      color: Colors.indigo[50],
+      child: const Icon(Icons.store, color: Colors.indigo),
     );
   }
 }
