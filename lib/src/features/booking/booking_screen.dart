@@ -1,10 +1,14 @@
 // lib/src/features/booking/booking_screen.dart
 import 'package:flutter/material.dart';
+import '../../models/designer.dart';
+import '../../models/shop.dart';
+import '../../services/shop_service.dart';
+import 'booking_confirm_screen.dart';
 
 class BookingScreen extends StatefulWidget {
-  final String shopName;
+  final Shop shop;
 
-  const BookingScreen({Key? key, required this.shopName}) : super(key: key);
+  const BookingScreen({Key? key, required this.shop}) : super(key: key);
 
   @override
   State<BookingScreen> createState() => _BookingScreenState();
@@ -13,10 +17,6 @@ class BookingScreen extends StatefulWidget {
 class _BookingScreenState extends State<BookingScreen> {
   // 1. 시술 메뉴 상태 관리 (DB의 menu_type 스키마와 1:1 매핑)
   String _selectedMenuType = 'ROOT_DYE'; // 기본값: 뿌리 염색
-
-  // 가상의 매장 가격 데이터 (실제 연동 시 shop 테이블의 root_price, full_price 컬럼에서 받아옴)
-  final int _rootPrice = 29000;
-  final int _fullPrice = 59000;
 
   // 2. 예약 날짜 및 시간 상태 관리
   DateTime _selectedDate = DateTime.now().add(
@@ -35,10 +35,45 @@ class _BookingScreenState extends State<BookingScreen> {
     "19:00",
   ];
 
+  // 3. 디자이너 목록 상태 관리 (실제 DB 연동)
+  List<Designer> _designers = [];
+  Designer? _selectedDesigner;
+  bool _isLoadingDesigners = true;
+  String? _designerError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDesigners();
+  }
+
+  Future<void> _loadDesigners() async {
+    setState(() {
+      _isLoadingDesigners = true;
+      _designerError = null;
+    });
+
+    try {
+      final designers = await ShopService.getDesigners(widget.shop.shopId);
+      setState(() => _designers = designers);
+    } catch (e) {
+      setState(() {
+        _designerError = e.toString().replaceFirst('Exception: ', '');
+      });
+    } finally {
+      setState(() => _isLoadingDesigners = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // 선택된 메뉴에 따라 결제 금액 실시간 계산 (DB의 total_amount 조건 충족)
-    int totalAmount = _selectedMenuType == 'ROOT_DYE' ? _rootPrice : _fullPrice;
+    final int totalAmount = _selectedMenuType == 'ROOT_DYE'
+        ? widget.shop.rootPrice
+        : widget.shop.fullPrice;
+
+    final bool canSubmit =
+        _selectedTimeSlot != null && _selectedDesigner != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -58,7 +93,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 children: [
                   // 상단 선택 매장 타이틀
                   Text(
-                    widget.shopName,
+                    widget.shop.shopName,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -83,7 +118,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       children: [
                         RadioListTile<String>(
                           title: const Text('뿌리 염색 (Root Dyeing)'),
-                          subtitle: Text('$_rootPrice원 / 기장 제한 없음'),
+                          subtitle: Text('${widget.shop.rootPrice}원 / 기장 제한 없음'),
                           value: 'ROOT_DYE',
                           groupValue: _selectedMenuType,
                           activeColor: Colors.indigo,
@@ -96,7 +131,9 @@ class _BookingScreenState extends State<BookingScreen> {
                         const Divider(height: 1),
                         RadioListTile<String>(
                           title: const Text('전체 염색 (Full Dyeing)'),
-                          subtitle: Text('$_fullPrice원 / 단발 기준 (기장 추가 발생 가능)'),
+                          subtitle: Text(
+                            '${widget.shop.fullPrice}원 / 단발 기준 (기장 추가 발생 가능)',
+                          ),
                           value: 'FULL_DYE',
                           groupValue: _selectedMenuType,
                           activeColor: Colors.indigo,
@@ -111,9 +148,18 @@ class _BookingScreenState extends State<BookingScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 📅 섹션 2: 날짜 선택
+                  // 👤 섹션 2: 디자이너 선택 (실제 DB 연동)
                   const Text(
-                    '2. 예약 날짜 선택',
+                    '2. 담당 디자이너 선택',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDesignerSection(),
+                  const SizedBox(height: 24),
+
+                  // 📅 섹션 3: 날짜 선택
+                  const Text(
+                    '3. 예약 날짜 선택',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
@@ -164,9 +210,9 @@ class _BookingScreenState extends State<BookingScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // ⏰ 섹션 3: 시간 선택 (Chip 위젯 배치)
+                  // ⏰ 섹션 4: 시간 선택 (Chip 위젯 배치)
                   const Text(
-                    '3. 예약 시간 선택',
+                    '4. 예약 시간 선택',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 10),
@@ -240,20 +286,18 @@ class _BookingScreenState extends State<BookingScreen> {
                       height: 50,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _selectedTimeSlot == null
-                              ? Colors.grey[400]
-                              : Colors.indigo,
+                          backgroundColor: canSubmit
+                              ? Colors.indigo
+                              : Colors.grey[400],
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        // 시간을 무조건 골라야만 버튼이 활성화되도록 방어 코딩
-                        onPressed: _selectedTimeSlot == null
-                            ? null
-                            : () {
-                                _submitBooking(totalAmount);
-                              },
+                        // 디자이너·시간을 모두 골라야만 버튼이 활성화되도록 방어 코딩
+                        onPressed: canSubmit
+                            ? () => _goToConfirmScreen(totalAmount)
+                            : null,
                         child: const Text(
                           '예약 신청하기',
                           style: TextStyle(
@@ -273,38 +317,75 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
-  // 예약을 최종 확정 지을 때 호출되는 가상 로직 함수
-  void _submitBooking(int finalAmount) {
-    // 날짜 스트링과 시간 슬롯 스트링 결합 연산
-    String appointmentTimeStr =
-        "${_selectedDate.toString().substring(0, 10)} ${_selectedTimeSlot!}:00";
+  Widget _buildDesignerSection() {
+    if (_isLoadingDesigners) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('예약 확인'),
-        content: Text(
-          '시술 종류: ${_selectedMenuType == 'ROOT_DYE' ? '뿌리 염색' : '전체 염색'}\n일시: $appointmentTimeStr\n금액: ${finalAmount}원으로 신청하시겠습니까?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // 팝업 닫기
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('예약 요청이 성공적으로 완료되었습니다!')),
-              );
-              Navigator.pop(context); // 홈 화면으로 귀환
-            },
-            child: const Text(
-              '확정',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+    if (_designerError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_designerError!, style: const TextStyle(color: Colors.grey)),
+          TextButton(onPressed: _loadDesigners, child: const Text('다시 시도')),
         ],
+      );
+    }
+
+    if (_designers.isEmpty) {
+      return const Text(
+        '현재 예약 가능한 디자이너가 없습니다.',
+        style: TextStyle(color: Colors.grey),
+      );
+    }
+
+    return Wrap(
+      spacing: 8.0,
+      runSpacing: 8.0,
+      children: _designers.map((designer) {
+        final isSelected = _selectedDesigner?.designerId == designer.designerId;
+        return ChoiceChip(
+          label: Text('${designer.designerName} · ${designer.position}'),
+          selected: isSelected,
+          selectedColor: Colors.indigo,
+          labelStyle: TextStyle(
+            color: isSelected ? Colors.white : Colors.black,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+          onSelected: (selected) {
+            setState(() {
+              _selectedDesigner = selected ? designer : null;
+            });
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  // 예약 확인 화면으로 이동 (실제 예약 생성은 해당 화면에서 처리)
+  void _goToConfirmScreen(int finalAmount) {
+    final timeParts = _selectedTimeSlot!.split(':');
+    final reservationTime = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      int.parse(timeParts[0]),
+      int.parse(timeParts[1]),
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BookingConfirmScreen(
+          shop: widget.shop,
+          designer: _selectedDesigner!,
+          menuType: _selectedMenuType,
+          reservationTime: reservationTime,
+          totalAmount: finalAmount,
+        ),
       ),
     );
   }

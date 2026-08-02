@@ -19,7 +19,7 @@ android {
         applicationId = "com.example.dyeing_client_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = flutter.minSdkVersion // flutter_naver_map(네이버 지도 SDK) 최소 지원 버전 (Android 6.0)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

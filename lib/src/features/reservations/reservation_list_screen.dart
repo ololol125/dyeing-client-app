@@ -1,5 +1,7 @@
 // lib/src/features/reservations/reservation_list_screen.dart
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
+import '../auth/login_screen.dart';
 import 'reservation_controller.dart';
 
 class ReservationListScreen extends StatefulWidget {
@@ -37,6 +39,13 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: '로그아웃',
+            onPressed: () => _handleLogout(context),
+          ),
+        ],
       ),
       // 화면 UI 파일 내 body: Column 부분 수정 스니펫
       body: Column(
@@ -88,6 +97,36 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('로그아웃'),
+        content: const Text('로그아웃 하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('로그아웃'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await AuthService.logout();
+
+    if (!context.mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false,
     );
   }
 

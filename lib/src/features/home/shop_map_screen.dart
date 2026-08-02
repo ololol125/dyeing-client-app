@@ -1,11 +1,60 @@
 // lib/src/features/home/shop_map_screen.dart
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
-import '../booking/booking_screen.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
+import '../../models/shop.dart';
+import '../shop/shop_detail_screen.dart';
 
-class ShopMapScreen extends StatelessWidget {
-  final List<Map<String, dynamic>> shops;
+// 매장이 하나도 없을 때 지도가 띄울 기본 좌표 (대구 중구)
+const _fallbackCenter = NLatLng(35.8714, 128.6014);
+
+// 네이버 지도 SDK는 Android/iOS 네이티브 전용
+bool get _isMapSupportedPlatform =>
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS);
+
+class ShopMapScreen extends StatefulWidget {
+  final List<Shop> shops;
 
   const ShopMapScreen({Key? key, required this.shops}) : super(key: key);
+
+  @override
+  State<ShopMapScreen> createState() => _ShopMapScreenState();
+}
+
+class _ShopMapScreenState extends State<ShopMapScreen> {
+  NaverMapController? _mapController;
+
+  NLatLng get _initialCenter {
+    if (widget.shops.isEmpty) return _fallbackCenter;
+    return NLatLng(widget.shops.first.latitude, widget.shops.first.longitude);
+  }
+
+  Future<void> _onMapReady(NaverMapController controller) async {
+    _mapController = controller;
+
+    for (final shop in widget.shops) {
+      final marker = NMarker(
+        id: shop.shopId.toString(),
+        position: NLatLng(shop.latitude, shop.longitude),
+        caption: NOverlayCaption(text: shop.shopName),
+      );
+      await controller.addOverlay(marker);
+    }
+  }
+
+  Future<void> _focusShop(Shop shop) async {
+    final controller = _mapController;
+    if (controller == null) return;
+
+    await controller.updateCamera(
+      NCameraUpdate.withParams(
+        target: NLatLng(shop.latitude, shop.longitude),
+        zoom: 15,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,37 +68,27 @@ class ShopMapScreen extends StatelessWidget {
       ),
       body: Stack(
         children: [
-          // 1. 지도 가상 영역 (실제 SDK 연동 시 이 컨테이너 자리에 GoogleMap 위젯이 들어갑니다)
-          Container(
-            color: Colors.indigo[50], // 지도 배경 대용
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.my_location, size: 36, color: Colors.blue),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '내 현재 위치 (대구)',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 40),
-                  // 가상 마커 핀 유출
-                  Icon(
-                    Icons.location_on,
-                    size: 40,
-                    color: Colors.redAccent[700],
-                  ),
-                  Text(
-                    shops[0]['shopName'],
-                    style: const TextStyle(
-                      backgroundColor: Colors.white,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
+          // 1. 네이버 지도 (매장별 마커 표시). Web/데스크톱에서는 미지원 안내로 대체
+          if (_isMapSupportedPlatform)
+            NaverMap(
+              options: NaverMapViewOptions(
+                initialCameraPosition: NCameraPosition(
+                  target: _initialCenter,
+                  zoom: 12,
+                ),
+              ),
+              onMapReady: _onMapReady,
+            )
+          else
+            Container(
+              color: Colors.indigo[50],
+              child: const Center(
+                child: Text(
+                  '네이버 지도는 모바일 앱(Android/iOS)에서만 지원됩니다.',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
             ),
-          ),
 
           // 2. 지도 위에 둥둥 떠있는 하단 매장 정보 카드 (가로 스크롤 가능)
           Positioned(
@@ -60,9 +99,9 @@ class ShopMapScreen extends StatelessWidget {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: shops.length,
+              itemCount: widget.shops.length,
               itemBuilder: (context, index) {
-                final shop = shops[index];
+                final shop = widget.shops[index];
                 return Container(
                   width: MediaQuery.of(context).size.width * 0.8,
                   margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -71,43 +110,46 @@ class ShopMapScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(10),
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          shop['imageUrl'],
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => _focusShop(shop),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(10),
+                        leading: Container(
                           width: 60,
                           height: 60,
-                          fit: BoxFit.cover,
+                          decoration: BoxDecoration(
+                            color: Colors.indigo[50],
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.store, color: Colors.indigo),
                         ),
-                      ),
-                      title: Text(
-                        shop['shopName'],
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                        title: Text(
+                          shop.shopName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                      subtitle: Text(
-                        '${shop['baseAddress']}\n📍 ${shop['distance']}',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color: Colors.indigo,
+                        subtitle: Text(
+                          shop.baseAddress,
+                          style: const TextStyle(fontSize: 11),
                         ),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  BookingScreen(shopName: shop['shopName']),
-                            ),
-                          );
-                        },
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.arrow_forward_ios,
+                            size: 16,
+                            color: Colors.indigo,
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ShopDetailScreen(shop: shop),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),

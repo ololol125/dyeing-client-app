@@ -3,19 +3,17 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
 import '../models/reservation.dart';
+import 'auth_service.dart';
 
 class ApiService {
-  // 🔑 인증용 가짜 토큰 (로그인 기능 연동 전 임시 사용)
-  // 실제 연동 시 로컬 스토리지에 저장된 사용자 JWT 토큰 값을 동적으로 넣어주어야 합니다.
-  static const String _mockToken =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjcsImVtYWlsIjoieWVvbmdoeWVvbjA1QGdtYWlsLmNvbSIsInJvbGUiOiJDTElFTlQiLCJpYXQiOjE3ODMyNjczMTMsImV4cCI6MTc4Mzg3MjExM30.iNlvAQPrY3FQRm4GhHjgYYd-SM1Yo8StBgTHWGeTeYo';
-
-  // 공통 헤더 정의
-  static Map<String, String> _getHeaders() {
+  // 공통 헤더 정의 (로그인 시 저장된 JWT 토큰을 실어 보냄)
+  static Future<Map<String, String>> _getHeaders() async {
+    final token = await AuthService.getToken();
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': 'Bearer $_mockToken', // Next.js 백엔드의 verifyAuth(req) 통과용
+      if (token != null)
+        'Authorization': 'Bearer $token', // Next.js 백엔드의 verifyAuth(req) 통과용
     };
   }
 
@@ -25,7 +23,7 @@ class ApiService {
     final url = Uri.parse('${AppConstants.baseUrl}/v1/reservations/client');
 
     try {
-      final response = await http.get(url, headers: _getHeaders());
+      final response = await http.get(url, headers: await _getHeaders());
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> decodedRoot = json.decode(
@@ -74,7 +72,7 @@ class ApiService {
     try {
       final response = await http.post(
         url,
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
         body: json.encode(requestBody),
       );
 
