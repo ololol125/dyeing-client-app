@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'src/core/constants.dart';
 import 'src/core/theme.dart';
@@ -52,6 +53,14 @@ class MainApp extends StatelessWidget {
       title: '염색방 예약 시스템',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      // 복사·붙여넣기 메뉴 등 기본 안내 문구도 한국어로
+      locale: const Locale('ko', 'KR'),
+      supportedLocales: const [Locale('ko', 'KR')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       // 기기의 '글자 크게' 설정은 따르되, 화면이 깨지지 않도록 최대 1.6배로 제한
       builder: (context, child) => MediaQuery.withClampedTextScaling(
         maxScaleFactor: 1.6,

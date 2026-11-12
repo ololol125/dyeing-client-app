@@ -75,12 +75,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 88,
-                      height: 88,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(color: AppColors.primarySoft, shape: BoxShape.circle),
-                      child: const Icon(Icons.content_cut, size: 44, color: AppColors.primary),
+                    Center(
+                      child: Image.asset('assets/images/logo.png', width: 88, height: 88, semanticLabel: '염색온 로고'),
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     Text(

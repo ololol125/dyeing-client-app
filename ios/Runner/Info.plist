@@ -5,9 +5,9 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>ko</string>
 	<key>CFBundleDisplayName</key>
-	<string>Dyeing Client App</string>
+	<string>염색온</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>dyeing_client_app</string>
+	<string>염색온</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -127,5 +127,16 @@
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
 		<true/>
 	</dict>
+	<!-- 네이버 지도 SDK에 위치 기능 코드가 포함되어 있어 설명 문구 필요 (앱은 현재 위치를 요청하지 않음) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>지도에서 내 주변 염색방을 보여 드리기 위해 현재 위치를 사용해요.</string>
+	<!-- HTTPS 등 표준 암호화만 사용: 업로드할 때마다 수출 규정 질문을 건너뜀 -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- 시스템 안내창(권한 요청 등)을 한국어로 표시 -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ko</string>
+	</array>
 </dict>
 </plist>

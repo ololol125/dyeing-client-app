@@ -1,4 +1,4 @@
-package com.example.dyeing_client_app
+package kr.co.clmt.yeomsaekon
 
 import io.flutter.embedding.android.FlutterActivity
 
