@@ -2,8 +2,11 @@
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
+import '../../core/format.dart';
+import '../../core/theme.dart';
 import '../../models/shop.dart';
 import '../../services/post_service.dart';
+import '../../widgets/app_widgets.dart';
 import '../shop/shop_detail_screen.dart';
 
 // 매장이 하나도 없을 때 지도가 띄울 기본 좌표 (대구 중구)
@@ -18,7 +21,7 @@ bool get _isMapSupportedPlatform =>
 class ShopMapScreen extends StatefulWidget {
   final List<Shop> shops;
 
-  const ShopMapScreen({Key? key, required this.shops}) : super(key: key);
+  const ShopMapScreen({super.key, required this.shops});
 
   @override
   State<ShopMapScreen> createState() => _ShopMapScreenState();
@@ -87,13 +90,7 @@ class _ShopMapScreenState extends State<ShopMapScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          '내 주변 염색방 지도',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('지도에서 찾기')),
       body: Stack(
         children: [
           // 1. 네이버 지도 (매장별 마커 표시). Web/데스크톱에서는 미지원 안내로 대체
@@ -108,82 +105,89 @@ class _ShopMapScreenState extends State<ShopMapScreen> {
               onMapReady: _onMapReady,
             )
           else
-            Container(
-              color: Colors.indigo[50],
-              child: const Center(
-                child: Text(
-                  '네이버 지도는 모바일 앱(Android/iOS)에서만 지원됩니다.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
+            const StateMessage(
+              icon: Icons.map_outlined,
+              title: '이 기기에서는 지도를 볼 수 없어요',
+              message: '휴대폰이나 태블릿 앱에서 이용해 주세요.',
             ),
 
-          // 2. 지도 위에 둥둥 떠있는 하단 매장 정보 카드 (가로 스크롤 가능)
+          // 2. 지도 아래쪽 매장 카드 (옆으로 넘겨 보기). 카드를 누르면 지도가 그 매장으로 이동
           Positioned(
-            bottom: 20,
+            bottom: AppSpacing.lg,
             left: 0,
             right: 0,
-            height: 110,
+            height: 196,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               itemCount: widget.shops.length,
               itemBuilder: (context, index) {
                 final shop = widget.shops[index];
-                final thumbnailUrl = _shopThumbnails[shop.shopId];
+                final width = MediaQuery.of(context).size.width;
                 return Container(
-                  width: MediaQuery.of(context).size.width * 0.8,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: width > 600 ? 420 : width * 0.86,
+                  margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
                   child: Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    margin: EdgeInsets.zero,
+                    elevation: 3,
+                    clipBehavior: Clip.antiAlias,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
                       onTap: () => _focusShop(shop),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(10),
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: SizedBox(
-                            width: 60,
-                            height: 60,
-                            child: thumbnailUrl != null
-                                ? Image.network(
-                                    thumbnailUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        _shopThumbnailPlaceholder(),
-                                  )
-                                : _shopThumbnailPlaceholder(),
-                          ),
-                        ),
-                        title: Text(
-                          shop.shopName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Text(
-                          shop.baseAddress,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.arrow_forward_ios,
-                            size: 16,
-                            color: Colors.indigo,
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ShopDetailScreen(shop: shop),
-                              ),
-                            );
-                          },
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(AppRadius.md),
+                                  child: SizedBox(
+                                    width: 72,
+                                    height: 72,
+                                    child: ShopThumbnail(
+                                      imageUrl: _shopThumbnails[shop.shopId],
+                                      iconSize: 32,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        shop.shopName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context).textTheme.titleLarge,
+                                      ),
+                                      Text(
+                                        '뿌리 염색 ${formatWon(shop.rootPrice)}',
+                                        style: const TextStyle(
+                                          fontSize: AppTextSize.body,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Spacer(),
+                            OutlinedButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ShopDetailScreen(shop: shop),
+                                  ),
+                                );
+                              },
+                              child: const Text('매장 보기'),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -194,13 +198,6 @@ class _ShopMapScreenState extends State<ShopMapScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _shopThumbnailPlaceholder() {
-    return Container(
-      color: Colors.indigo[50],
-      child: const Icon(Icons.store, color: Colors.indigo),
     );
   }
 }

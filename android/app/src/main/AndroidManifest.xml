@@ -79,6 +79,15 @@
         <package android:name="com.TouchEn.mVaccine.webs" /> <!-- TouchEn 백신 -->
         <package android:name="com.ahnlab.v3mobileplus" /> <!-- V3 백신 -->
         <package android:name="kr.co.shiftworks.vguardweb" /> <!-- V-Guard 백신 -->
+        <!-- 매장 상세: 전화하기(tel:) / 길찾기(https: 네이버 지도) -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

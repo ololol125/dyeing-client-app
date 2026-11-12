@@ -1,16 +1,20 @@
-// lib/src/features/shop/shop_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/format.dart';
+import '../../core/messages.dart';
+import '../../core/theme.dart';
 import '../../models/post.dart';
 import '../../models/shop.dart';
 import '../../services/post_service.dart';
+import '../../widgets/app_widgets.dart';
 import '../booking/booking_screen.dart';
 
-// 매장 상세 화면: 매장 소개/연락처/영업시간과 매장 소식(게시물) 피드를 보여주고,
+// 매장 상세 화면: 전화·길찾기를 가장 위에 크게 두고, 가격·영업시간·매장 소식을 보여준다.
 // 여기서 예약 화면으로 이어진다.
 class ShopDetailScreen extends StatefulWidget {
   final Shop shop;
 
-  const ShopDetailScreen({Key? key, required this.shop}) : super(key: key);
+  const ShopDetailScreen({super.key, required this.shop});
 
   @override
   State<ShopDetailScreen> createState() => _ShopDetailScreenState();
@@ -37,11 +41,34 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
       final posts = await PostService.getPosts(shopId: widget.shop.shopId);
       setState(() => _posts = posts);
     } catch (e) {
-      setState(() {
-        _postsError = e.toString().replaceFirst('Exception: ', '');
-      });
+      setState(() => _postsError = friendlyError(e));
     } finally {
       setState(() => _isLoadingPosts = false);
+    }
+  }
+
+  bool get _hasPhone =>
+      widget.shop.phone != null && widget.shop.phone!.trim().isNotEmpty;
+
+  Future<void> _call() async {
+    final number = widget.shop.phone!.replaceAll(RegExp(r'[^0-9+]'), '');
+    final opened = await launchUrl(Uri(scheme: 'tel', path: number));
+    if (!opened && mounted) {
+      showAppMessage(context, '전화를 걸 수 없어요. 매장 번호: ${widget.shop.phone}');
+    }
+  }
+
+  // 네이버 지도에서 매장 주소를 찾아 길찾기를 시작할 수 있게 연다 (앱이 없으면 웹으로)
+  Future<void> _openDirections() async {
+    final query = Uri.encodeComponent(
+      '${widget.shop.shopName} ${widget.shop.baseAddress}',
+    );
+    final opened = await launchUrl(
+      Uri.parse('https://map.naver.com/p/search/$query'),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      showAppMessage(context, '지도를 열 수 없어요. 주소: ${widget.shop.baseAddress}');
     }
   }
 
@@ -50,171 +77,211 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
     final shop = widget.shop;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          shop.shopName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('매장 정보')),
       body: RefreshIndicator(
         onRefresh: _loadPosts,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screen,
+            AppSpacing.sm,
+            AppSpacing.screen,
+            AppSpacing.xxl,
+          ),
           children: [
-            _buildShopHeader(shop),
-            const SizedBox(height: 24),
-            const Text(
-              '매장 소식',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ContentWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    shop.shopName,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    shop.baseAddress,
+                    style: const TextStyle(
+                      fontSize: AppTextSize.body,
+                      color: AppColors.inkSub,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  _buildContactButtons(),
+                  const SizedBox(height: AppSpacing.xl),
+                  _buildPriceCard(shop),
+                  const SizedBox(height: AppSpacing.md),
+                  _buildInfoCard(shop),
+                  const SizedBox(height: AppSpacing.xl),
+                  const SectionTitle('매장 소식'),
+                  _buildPostsSection(),
+                ],
+              ),
             ),
-            const SizedBox(height: 10),
-            _buildPostsSection(),
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey[200]!,
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+      bottomNavigationBar: BottomActionBar(
+        child: PrimaryButton(
+          label: '예약하기',
+          icon: Icons.event_available,
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => BookingScreen(shop: shop),
               ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => BookingScreen(shop: shop),
-                  ),
-                );
-              },
-              child: const Text(
-                '예약하기',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildShopHeader(Shop shop) {
+  // 전화하기 / 길찾기: 화면 맨 위에 크게
+  Widget _buildContactButtons() {
+    final directions = OutlinedButton.icon(
+      onPressed: _openDirections,
+      icon: const Icon(Icons.directions_outlined),
+      label: const Text('길찾기'),
+    );
+    if (!_hasPhone) return directions;
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _call,
+            icon: const Icon(Icons.call_outlined),
+            label: const Text('전화하기'),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(child: directions),
+      ],
+    );
+  }
+
+  Widget _buildPriceCard(Shop shop) {
     return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey[200]!),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              shop.shopName,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.indigo,
-              ),
+            Text('시술 가격', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.md),
+            _priceRow('뿌리 염색', '자라난 뿌리 부분만', shop.rootPrice),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Divider(),
             ),
-            const SizedBox(height: 4),
-            Text(
-              shop.baseAddress,
-              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-            ),
-            if (shop.description != null && shop.description!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                shop.description!,
-                style: const TextStyle(fontSize: 14, height: 1.4),
-              ),
-            ],
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            if (shop.phone != null && shop.phone!.isNotEmpty)
-              _infoRow(Icons.call_outlined, '전화번호', shop.phone!),
-            if (shop.businessHours != null && shop.businessHours!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _infoRow(Icons.access_time, '영업시간', shop.businessHours!),
-            ],
-            const SizedBox(height: 8),
-            _infoRow(
-              Icons.payments_outlined,
-              '가격',
-              '뿌리 ${shop.rootPrice}원 · 전체 ${shop.fullPrice}원',
-            ),
+            _priceRow('전체 염색', '단발 기준 · 길이에 따라 추가 요금', shop.fullPrice),
           ],
         ),
       ),
     );
   }
 
-  Widget _infoRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _priceRow(String name, String note, int price) {
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.end,
+      spacing: AppSpacing.md,
       children: [
-        Icon(icon, size: 16, color: Colors.grey[500]),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 70,
-          child: Text(label, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              name,
+              style: const TextStyle(
+                fontSize: AppTextSize.button,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              note,
+              style: const TextStyle(
+                fontSize: AppTextSize.caption,
+                color: AppColors.inkSub,
+              ),
+            ),
+          ],
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        Text(
+          formatWon(price),
+          style: const TextStyle(
+            fontSize: AppTextSize.title,
+            fontWeight: FontWeight.w700,
+            color: AppColors.primary,
           ),
         ),
       ],
     );
   }
 
+  Widget _buildInfoCard(Shop shop) {
+    final hasHours =
+        shop.businessHours != null && shop.businessHours!.trim().isNotEmpty;
+    final hasDescription =
+        shop.description != null && shop.description!.trim().isNotEmpty;
+    if (!_hasPhone && !hasHours && !hasDescription) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (hasDescription) ...[
+              Text(
+                shop.description!,
+                style: const TextStyle(fontSize: AppTextSize.body, height: 1.6),
+              ),
+              if (_hasPhone || hasHours) ...[
+                const SizedBox(height: AppSpacing.md),
+                const Divider(),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+            ],
+            if (hasHours)
+              InfoRow(
+                icon: Icons.schedule,
+                label: '영업시간',
+                value: shop.businessHours!,
+              ),
+            if (_hasPhone)
+              InfoRow(
+                icon: Icons.call_outlined,
+                label: '전화번호',
+                value: shop.phone!,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPostsSection() {
     if (_isLoadingPosts) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+        child: LoadingMessage(text: '매장 소식을 불러오는 중입니다'),
       );
     }
 
     if (_postsError != null) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(_postsError!, style: const TextStyle(color: Colors.grey)),
-          TextButton(onPressed: _loadPosts, child: const Text('다시 시도')),
-        ],
-      );
+      return StateMessage.error(message: _postsError!, onRetry: _loadPosts);
     }
 
     if (_posts.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: Text(
-            '아직 등록된 매장 소식이 없습니다.',
-            style: TextStyle(color: Colors.grey),
-          ),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+        child: Text(
+          '아직 올라온 매장 소식이 없어요.',
+          style: TextStyle(fontSize: AppTextSize.body, color: AppColors.inkSub),
         ),
       );
     }
@@ -230,58 +297,44 @@ class _PostCard extends StatelessWidget {
 
   const _PostCard({required this.post});
 
-  String get _dateLabel {
-    final date = post.createdAt;
-    if (date == null) return '';
-    return '${date.year}.${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context) {
+    final date = post.createdAt?.toLocal();
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        side: BorderSide(color: Colors.grey[200]!),
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (post.imageUrl != null && post.imageUrl!.isNotEmpty)
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: Image.network(
-                post.imageUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: Colors.grey[100],
-                  child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
-                ),
-              ),
+              child: ShopThumbnail(imageUrl: post.imageUrl),
             ),
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  post.title,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
+                Text(post.title, style: Theme.of(context).textTheme.titleLarge),
                 if (post.content != null && post.content!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(
                     post.content!,
-                    style: TextStyle(fontSize: 13, color: Colors.grey[700], height: 1.4),
+                    style: const TextStyle(
+                      fontSize: AppTextSize.body,
+                      height: 1.6,
+                    ),
                   ),
                 ],
-                if (_dateLabel.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                if (date != null) ...[
+                  const SizedBox(height: AppSpacing.md),
                   Text(
-                    _dateLabel,
-                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                    '${date.year}년 ${formatDate(date)}',
+                    style: const TextStyle(
+                      fontSize: AppTextSize.caption,
+                      color: AppColors.inkSub,
+                    ),
                   ),
                 ],
               ],

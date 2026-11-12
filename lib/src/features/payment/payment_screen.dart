@@ -2,31 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:portone_flutter/v2.dart';
 import '../../core/constants.dart';
 import '../../models/payment_session.dart';
+import '../../widgets/app_widgets.dart';
 
 // 포트원 V2 결제창을 웹뷰로 띄우는 화면.
 // 결제창이 닫히면 PaymentResponse를 결과로 pop 한다 (뒤로가기로 닫으면 null).
 class PaymentScreen extends StatelessWidget {
   final PaymentSession session;
 
-  const PaymentScreen({Key? key, required this.session}) : super(key: key);
+  const PaymentScreen({super.key, required this.session});
 
   @override
   Widget build(BuildContext context) {
     return PortonePayment(
-      appBar: AppBar(
-        title: const Text('결제하기', style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-      ),
-      initialChild: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('결제창을 불러오는 중입니다...', style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      ),
+      appBar: AppBar(title: const Text('결제하기')),
+      initialChild: const LoadingMessage(text: '결제 화면을 불러오고 있어요'),
       data: PaymentRequest(
         storeId: session.storeId,
         channelKey: session.channelKey,

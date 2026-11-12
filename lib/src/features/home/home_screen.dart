@@ -1,13 +1,17 @@
 // lib/src/features/home/home_screen.dart
 import 'package:flutter/material.dart';
+import '../../core/format.dart';
+import '../../core/messages.dart';
+import '../../core/theme.dart';
 import '../../models/shop.dart';
 import '../../services/post_service.dart';
 import '../../services/shop_service.dart';
+import '../../widgets/app_widgets.dart';
 import '../shop/shop_detail_screen.dart';
 import './shop_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -31,6 +35,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadThumbnails();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   // 실제 백엔드 DB에서 매장 목록을 동기화
   Future<void> _loadShops() async {
     setState(() {
@@ -42,12 +52,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final shops = await ShopService.getShops();
       setState(() {
         _allShops = shops;
-        _filteredShops = shops;
+        _filteredShops = _applyFilter(shops, _searchController.text);
       });
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
-      });
+      setState(() => _errorMessage = friendlyError(e));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -72,187 +80,219 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // 매장 이름 또는 주소(동네 이름)로 찾기
+  List<Shop> _applyFilter(List<Shop> shops, String query) {
+    final q = query.trim();
+    if (q.isEmpty) return shops;
+    return shops
+        .where((shop) => shop.shopName.contains(q) || shop.baseAddress.contains(q))
+        .toList();
+  }
+
   void _filterShops(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredShops = _allShops;
-      } else {
-        _filteredShops = _allShops
-            .where(
-              (shop) => shop.shopName.toLowerCase().contains(
-                query.toLowerCase(),
-              ),
-            )
-            .toList();
-      }
-    });
+    setState(() => _filteredShops = _applyFilter(_allShops, query));
+  }
+
+  void _openMap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ShopMapScreen(shops: _allShops)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Container(
-          width: double.infinity,
-          height: 45,
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: TextField(
-            controller: _searchController,
-            onChanged: _filterShops,
-            decoration: InputDecoration(
-              hintText: '염색방 이름이나 지역을 검색해 보세요',
-              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
-              prefixIcon: const Icon(Icons.search, color: Colors.grey),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.grey),
-                      onPressed: () {
-                        _searchController.clear();
-                        _filterShops('');
-                      },
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.map, color: Colors.indigo),
-                      onPressed: _allShops.isEmpty
-                          ? null
-                          : () {
-                              // 지도 화면으로 이동하며 현재 매장 데이터를 넘겨줍니다.
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      ShopMapScreen(shops: _allShops),
-                                ),
-                              );
-                            },
-                    ),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+      appBar: AppBar(title: const Text('염색온')),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingMessage(text: '염색방 목록을 불러오는 중입니다')
           : _errorMessage != null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(_errorMessage!, style: const TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 12),
-                  TextButton(onPressed: _loadShops, child: const Text('다시 시도')),
-                ],
-              ),
-            )
-          : _filteredShops.isEmpty
-          ? const Center(
-              child: Text(
-                '검색 결과와 일치하는 염색방이 없습니다.',
-                style: TextStyle(color: Colors.grey),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: _loadShops,
-              child: ListView.builder(
-                itemCount: _filteredShops.length,
-                itemBuilder: (context, index) {
-                  final shop = _filteredShops[index];
-                  final thumbnailUrl = _shopThumbnails[shop.shopId];
-
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
+              ? StateMessage.error(message: _errorMessage!, onRetry: _loadShops)
+              : RefreshIndicator(
+                  onRefresh: _loadShops,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screen,
+                      AppSpacing.sm,
+                      AppSpacing.screen,
+                      AppSpacing.xxl,
                     ),
-                    elevation: 2,
-                    clipBehavior: Clip.antiAlias,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ShopDetailScreen(shop: shop),
-                          ),
-                        );
-                      },
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 매장 대표 이미지 (매장 게시물의 최신 사진, 없으면 아이콘 플레이스홀더)
-                          AspectRatio(
-                            aspectRatio: 16 / 9,
-                            child: thumbnailUrl != null
-                                ? Image.network(
-                                    thumbnailUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        _shopThumbnailPlaceholder(),
-                                  )
-                                : _shopThumbnailPlaceholder(),
-                          ),
-
-                          // 매장 정보 텍스트 영역
-                          Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  shop.shopName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  shop.baseAddress,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey[600],
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '뿌리 ${shop.rootPrice}원 · 전체 ${shop.fullPrice}원',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.redAccent,
-                                  ),
-                                ),
-                              ],
+                    children: [
+                      ContentWidth(child: _buildSearchArea()),
+                      const SizedBox(height: AppSpacing.xl),
+                      if (_filteredShops.isEmpty)
+                        _buildEmptyResult()
+                      else
+                        ..._filteredShops.map(
+                          (shop) => ContentWidth(
+                            child: _ShopCard(
+                              shop: shop,
+                              thumbnailUrl: _shopThumbnails[shop.shopId],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
+                        ),
+                    ],
+                  ),
+                ),
     );
   }
 
-  Widget _shopThumbnailPlaceholder() {
-    return Container(
-      color: Colors.indigo[50],
-      child: const Center(
-        child: Icon(Icons.store, color: Colors.indigo, size: 40),
+  Widget _buildSearchArea() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '어느 염색방에 가실까요?',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        TextField(
+          controller: _searchController,
+          onChanged: (value) {
+            _filterShops(value);
+            setState(() {}); // 지우기 버튼 표시 갱신
+          },
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: '매장 이름이나 동네 이름',
+            prefixIcon: const Icon(Icons.search, size: 28),
+            suffixIcon: _searchController.text.isEmpty
+                ? null
+                : TextButton(
+                    onPressed: () {
+                      _searchController.clear();
+                      _filterShops('');
+                      setState(() {});
+                    },
+                    child: const Text('지우기'),
+                  ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        OutlinedButton.icon(
+          onPressed: _allShops.isEmpty ? null : _openMap,
+          icon: const Icon(Icons.map_outlined),
+          label: const Text('지도에서 찾기'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyResult() {
+    final searching = _searchController.text.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.xl),
+      child: StateMessage(
+        icon: Icons.search_off,
+        title: searching ? '찾으시는 염색방이 없어요' : '등록된 염색방이 아직 없어요',
+        message: searching ? '다른 이름이나 동네 이름으로 찾아보세요.' : null,
+        actionLabel: searching ? '전체 매장 보기' : null,
+        onAction: searching
+            ? () {
+                _searchController.clear();
+                _filterShops('');
+              }
+            : null,
       ),
+    );
+  }
+}
+
+class _ShopCard extends StatelessWidget {
+  final Shop shop;
+  final String? thumbnailUrl;
+
+  const _ShopCard({required this.shop, required this.thumbnailUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.lg),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => ShopDetailScreen(shop: shop)),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 매장 대표 이미지 (매장 게시물의 최신 사진, 없으면 아이콘)
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: ShopThumbnail(imageUrl: thumbnailUrl),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(shop.shopName, style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 3),
+                        child: Icon(Icons.place_outlined, size: 22, color: AppColors.inkSub),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          shop.baseAddress,
+                          style: const TextStyle(fontSize: AppTextSize.body, color: AppColors.inkSub),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  // 가격은 크고 굵게, 시술별로 한 줄씩
+                  _PriceLine(label: '뿌리 염색', price: shop.rootPrice),
+                  const SizedBox(height: AppSpacing.xs),
+                  _PriceLine(label: '전체 염색', price: shop.fullPrice),
+                  const SizedBox(height: AppSpacing.md),
+                  const Divider(),
+                  const SizedBox(height: AppSpacing.sm),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        '매장 보기',
+                        style: TextStyle(
+                          fontSize: AppTextSize.button,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, size: 28, color: AppColors.primary),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PriceLine extends StatelessWidget {
+  final String label;
+  final int price;
+
+  const _PriceLine({required this.label, required this.price});
+
+  @override
+  Widget build(BuildContext context) {
+    return AmountRow(
+      label: label,
+      amount: formatWon(price),
+      labelSize: AppTextSize.body,
+      labelWeight: FontWeight.w400,
+      amountSize: AppTextSize.button,
     );
   }
 }

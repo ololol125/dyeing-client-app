@@ -1,11 +1,14 @@
-// lib/src/features/reservations/reservation_list_screen.dart
 import 'package:flutter/material.dart';
+import '../../core/format.dart';
+import '../../core/theme.dart';
+import '../../models/reservation.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/app_widgets.dart';
 import '../auth/login_screen.dart';
 import 'reservation_controller.dart';
 
 class ReservationListScreen extends StatefulWidget {
-  const ReservationListScreen({Key? key}) : super(key: key);
+  const ReservationListScreen({super.key});
 
   @override
   State<ReservationListScreen> createState() => _ReservationListScreenState();
@@ -17,7 +20,7 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
   @override
   void initState() {
     super.initState();
-    _controller.fetchReservations(1); // 화면 켜질 때 데이터 로드
+    _controller.fetchReservations(); // 화면 켜질 때 데이터 로드
     _controller.addListener(_updateUI);
   }
 
@@ -34,68 +37,66 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          '내 예약 내역',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
+        title: const Text('내 예약'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: '로그아웃',
+          // 아이콘만 두지 않고 글자로 표시
+          TextButton(
             onPressed: () => _handleLogout(context),
+            child: const Text('로그아웃'),
           ),
+          const SizedBox(width: AppSpacing.xs),
         ],
       ),
-      // 화면 UI 파일 내 body: Column 부분 수정 스니펫
       body: Column(
         children: [
-          Row(
-            children: [
-              _buildTabButton("이용 예정", "CONFIRMED"),
-              _buildTabButton("이용 완료", "COMPLETED"),
-            ],
+          ContentWidth(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.screen, AppSpacing.sm, AppSpacing.screen, 0),
+              child: Row(
+                children: [
+                  _buildTabButton('다가오는 예약', ReservationController.upcoming),
+                  const SizedBox(width: AppSpacing.sm),
+                  _buildTabButton('지난 예약', ReservationController.past),
+                ],
+              ),
+            ),
           ),
-          const Divider(height: 1),
-          // 로딩 상태에 따라 다른 화면 연출
-          Expanded(
-            child: _controller.isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  ) // 뱅글뱅글 도는 로딩 인디케이터
-                : _controller.filteredReservations.isEmpty
-                ? const Center(child: Text("예약 내역이 없습니다."))
-                : ListView.builder(
-                    itemCount: _controller.filteredReservations.length,
-                    itemBuilder: (context, index) {
-                      final reservation =
-                          _controller.filteredReservations[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        child: ListTile(
-                          title: Text(
-                            reservation.shopName,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            "일시: ${reservation.reservationTime.toString().substring(0, 16)}\n시술: ${reservation.menuType == 'ROOT_DYE' ? '뿌리 염색' : '전체 염색'}",
-                          ),
-                          trailing: Text(
-                            "${reservation.totalAmount}원",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.indigo,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
+          const SizedBox(height: AppSpacing.md),
+          Expanded(child: _buildBody()),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_controller.isLoading) {
+      return const LoadingMessage(text: '예약 내역을 불러오는 중입니다');
+    }
+    if (_controller.errorMessage != null) {
+      return StateMessage.error(
+        message: _controller.errorMessage!,
+        onRetry: _controller.fetchReservations,
+      );
+    }
+
+    final reservations = _controller.filteredReservations;
+    if (reservations.isEmpty) {
+      final isUpcoming = _controller.currentFilter == ReservationController.upcoming;
+      return StateMessage(
+        icon: Icons.event_busy_outlined,
+        title: isUpcoming ? '다가오는 예약이 없어요' : '지난 예약이 없어요',
+        message: isUpcoming ? '\'염색방 찾기\'에서 원하는 매장을 골라 예약해 보세요.' : null,
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _controller.fetchReservations,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.screen, 0, AppSpacing.screen, AppSpacing.xxl),
+        itemCount: reservations.length,
+        itemBuilder: (context, index) => ContentWidth(
+          child: _ReservationCard(reservation: reservations[index]),
+        ),
       ),
     );
   }
@@ -104,14 +105,15 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('로그아웃'),
-        content: const Text('로그아웃 하시겠습니까?'),
+        title: const Text('로그아웃 하시겠어요?'),
+        content: const Text('다시 이용하시려면 이메일과 비밀번호로 로그인해야 해요.'),
+        actionsAlignment: MainAxisAlignment.spaceBetween,
         actions: [
-          TextButton(
+          OutlinedButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('취소'),
+            child: const Text('아니요'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('로그아웃'),
           ),
@@ -130,29 +132,68 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
     );
   }
 
-  Widget _buildTabButton(String label, String status) {
-    final isSelected = _controller.currentFilter == status;
+  // 큰 탭 버튼 (선택 상태는 색 + 체크 아이콘으로)
+  Widget _buildTabButton(String label, String filter) {
+    final isSelected = _controller.currentFilter == filter;
+    final style = isSelected
+        ? FilledButton.styleFrom(minimumSize: const Size(0, kAppTouchTarget))
+        : OutlinedButton.styleFrom(minimumSize: const Size(0, kAppTouchTarget));
+    void onPressed() => _controller.changeFilter(filter);
     return Expanded(
-      child: InkWell(
-        onTap: () => _controller.changeFilter(status),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isSelected ? Colors.indigo : Colors.transparent,
-                width: 2,
+      child: isSelected
+          ? FilledButton.icon(
+              style: style,
+              onPressed: onPressed,
+              icon: const Icon(Icons.check),
+              label: Text(label),
+            )
+          : OutlinedButton(style: style, onPressed: onPressed, child: Text(label)),
+    );
+  }
+}
+
+class _ReservationCard extends StatelessWidget {
+  final Reservation reservation;
+
+  const _ReservationCard({required this.reservation});
+
+  @override
+  Widget build(BuildContext context) {
+    final time = reservation.reservationTime;
+    final status = AppStatusStyle.reservation(
+      reservation.status,
+      paid: reservation.paymentStatus == 'PAID',
+    );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            StatusBadge(status),
+            const SizedBox(height: AppSpacing.md),
+            // 언제 가야 하는지가 가장 중요하므로 가장 크게
+            Text(
+              formatDateWithRelative(time),
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            Text(
+              formatTime(time.hour, time.minute),
+              style: const TextStyle(
+                fontSize: AppTextSize.title,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
               ),
             ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.indigo : Colors.grey,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
+            const SizedBox(height: AppSpacing.md),
+            const Divider(),
+            const SizedBox(height: AppSpacing.xs),
+            InfoRow(icon: Icons.storefront_outlined, label: '매장', value: reservation.shopName),
+            InfoRow(icon: Icons.content_cut, label: '시술', value: menuLabel(reservation.menuType)),
+            InfoRow(icon: Icons.person_outline, label: '담당 선생님', value: reservation.designerName),
+            InfoRow(icon: Icons.payments_outlined, label: '금액', value: formatWon(reservation.totalAmount)),
+          ],
         ),
       ),
     );
