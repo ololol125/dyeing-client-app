@@ -40,6 +40,7 @@ class ApiService {
           throw Exception(decodedRoot['error'] ?? '데이터 구조 로드 실패');
         }
       } else if (response.statusCode == 401) {
+        await AuthService.expireSession();
         throw Exception('인증 토큰이 유효하지 않습니다. 다시 로그인해 주세요.');
       } else {
         throw Exception('서버 오류가 발생했습니다. (코드: ${response.statusCode})');
@@ -63,7 +64,8 @@ class ApiService {
     final Map<String, dynamic> requestBody = {
       'shopId': shopId,
       'designerId': designerId,
-      'reservationTime': reservationTime.toIso8601String(),
+      // 시간대가 포함된 UTC 시각으로 전송 (서버는 UTC로 동작)
+      'reservationTime': reservationTime.toUtc().toIso8601String(),
       'menuType': menuType,
       'payMethod': payMethod,
       'notes': notes,
@@ -78,6 +80,11 @@ class ApiService {
       );
     } on http.ClientException catch (e) {
       throw Exception('결제 준비 중 네트워크 오류가 발생했습니다: $e');
+    }
+
+    if (response.statusCode == 401) {
+      await AuthService.expireSession();
+      throw Exception('로그인이 만료되었습니다. 다시 로그인해 주세요.');
     }
 
     final Map<String, dynamic> decoded = json.decode(
@@ -102,6 +109,11 @@ class ApiService {
       );
     } on http.ClientException catch (e) {
       throw Exception('결제 확인 중 네트워크 오류가 발생했습니다: $e');
+    }
+
+    if (response.statusCode == 401) {
+      await AuthService.expireSession();
+      throw Exception('로그인이 만료되었습니다. 다시 로그인해 주세요.');
     }
 
     final Map<String, dynamic> decoded = json.decode(

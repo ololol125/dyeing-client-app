@@ -25,8 +25,23 @@ void main() async {
     );
   }
 
+  // 토큰 만료로 세션이 끊기면 어느 화면에 있든 로그인 화면으로 이동
+  AuthService.onSessionExpired = () {
+    final navigator = navigatorKey.currentState;
+    if (navigator == null) return;
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+    ScaffoldMessenger.of(navigator.context).showSnackBar(
+      const SnackBar(content: Text('로그인이 만료되었습니다. 다시 로그인해 주세요.')),
+    );
+  };
+
   runApp(const MainApp());
 }
+
+final navigatorKey = GlobalKey<NavigatorState>();
 
 class MainApp extends StatelessWidget {
   const MainApp({super.key});
@@ -34,6 +49,7 @@ class MainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: '염색방 예약 시스템',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

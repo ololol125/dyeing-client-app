@@ -55,7 +55,8 @@ class Reservation {
       reservationId: json['reservationId'],
       shopId: json['shopId'],
       clientId: json['clientId'],
-      reservationTime: DateTime.parse(json['reservationTime']),
+      // 서버는 UTC로 내려주므로 기기 현지 시간으로 변환해 표시
+      reservationTime: DateTime.parse(json['reservationTime']).toLocal(),
       menuType: json['menuType'],
       totalAmount: json['totalAmount'],
       status: json['status'],

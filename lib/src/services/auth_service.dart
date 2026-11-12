@@ -9,6 +9,9 @@ class AuthService {
   static const String _tokenKey = 'auth_token';
   static const String _userKey = 'auth_user';
 
+  // 저장된 토큰이 만료/무효화됐을 때 호출 (main.dart에서 로그인 화면 이동을 등록)
+  static void Function()? onSessionExpired;
+
   // 1. 로그인 (POST /v1/users/login)
   static Future<AppUser> login({
     required String email,
@@ -94,9 +97,39 @@ class AuthService {
     return AppUser.fromJson(json.decode(userJson));
   }
 
+  // 토큰이 있고 만료되지 않았을 때만 로그인 상태로 본다 (만료된 토큰은 정리)
   static Future<bool> isLoggedIn() async {
     final token = await getToken();
-    return token != null;
+    if (token == null) return false;
+    if (_isExpired(token)) {
+      await logout();
+      return false;
+    }
+    return true;
+  }
+
+  // 서버가 401을 돌려준 경우: 저장된 로그인 정보를 지우고 로그인 화면으로 보낸다
+  static Future<void> expireSession() async {
+    if (await getToken() == null) return; // 이미 처리됨 (동시 요청 대비)
+    await logout();
+    onSessionExpired?.call();
+  }
+
+  // JWT payload의 exp(초 단위)를 확인. 디코딩할 수 없는 토큰은 만료로 취급
+  static bool _isExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+      final payload = json.decode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      );
+      final exp = payload['exp'];
+      if (exp is! int) return false;
+      final expiresAt = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+      return DateTime.now().isAfter(expiresAt);
+    } catch (_) {
+      return true;
+    }
   }
 
   // 5. 로그아웃
