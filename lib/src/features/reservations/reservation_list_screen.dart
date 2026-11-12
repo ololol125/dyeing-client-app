@@ -4,7 +4,7 @@ import '../../core/theme.dart';
 import '../../models/reservation.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/app_widgets.dart';
-import '../auth/login_screen.dart';
+import '../auth/require_login.dart';
 import 'reservation_controller.dart';
 
 class ReservationListScreen extends StatefulWidget {
@@ -17,11 +17,20 @@ class ReservationListScreen extends StatefulWidget {
 class _ReservationListScreenState extends State<ReservationListScreen> {
   final ReservationController _controller = ReservationController();
 
+  bool? _loggedIn; // null: 확인 중
+
   @override
   void initState() {
     super.initState();
-    _controller.fetchReservations(); // 화면 켜질 때 데이터 로드
     _controller.addListener(_updateUI);
+    _checkLoginAndLoad();
+  }
+
+  Future<void> _checkLoginAndLoad() async {
+    final loggedIn = await AuthService.isLoggedIn();
+    if (!mounted) return;
+    setState(() => _loggedIn = loggedIn);
+    if (loggedIn) _controller.fetchReservations(); // 로그인돼 있을 때만 불러오기
   }
 
   void _updateUI() => setState(() {});
@@ -36,18 +45,16 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('내 예약'),
-        actions: [
-          // 아이콘만 두지 않고 글자로 표시
-          TextButton(
-            onPressed: () => _handleLogout(context),
-            child: const Text('로그아웃'),
-          ),
-          const SizedBox(width: AppSpacing.xs),
-        ],
-      ),
-      body: Column(
+      appBar: AppBar(title: const Text('내 예약')),
+      body: _loggedIn == null
+          ? const LoadingMessage()
+          : _loggedIn == false
+              ? LoginPrompt(
+                  title: '로그인하면 예약을 볼 수 있어요',
+                  message: '예약하신 날짜와 시간, 매장을 한눈에 확인할 수 있어요.',
+                  onLoggedIn: _checkLoginAndLoad,
+                )
+              : Column(
         children: [
           ContentWidth(
             child: Padding(
@@ -98,37 +105,6 @@ class _ReservationListScreenState extends State<ReservationListScreen> {
           child: _ReservationCard(reservation: reservations[index]),
         ),
       ),
-    );
-  }
-
-  Future<void> _handleLogout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('로그아웃 하시겠어요?'),
-        content: const Text('다시 이용하시려면 이메일과 비밀번호로 로그인해야 해요.'),
-        actionsAlignment: MainAxisAlignment.spaceBetween,
-        actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('아니요'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('로그아웃'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    await AuthService.logout();
-
-    if (!context.mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (route) => false,
     );
   }
 

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/constants.dart';
+import '../../core/links.dart';
 import '../../core/messages.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
@@ -22,6 +24,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _agreed = false; // 이용약관·개인정보 수집·이용 동의 (필수)
 
   @override
   void dispose() {
@@ -35,6 +38,10 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _handleSignup() async {
     if (_isLoading || !_formKey.currentState!.validate()) return;
+    if (!_agreed) {
+      showAppMessage(context, '이용약관과 개인정보 수집·이용에 동의해 주셔야 가입할 수 있어요.');
+      return;
+    }
 
     setState(() => _isLoading = true);
 
@@ -165,7 +172,8 @@ class _SignupScreenState extends State<SignupScreen> {
                     onSubmitted: (_) => _handleSignup(),
                     validator: (v) => v != _passwordController.text ? '위에 적은 비밀번호와 달라요.' : null,
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  _buildConsent(),
+                  const SizedBox(height: AppSpacing.lg),
                   PrimaryButton(
                     label: '가입하기',
                     isLoading: _isLoading,
@@ -177,6 +185,54 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // 필수 동의: 카드 전체를 눌러 체크, 약관 내용은 링크로 확인
+  Widget _buildConsent() {
+    // Material로 감싸야 체크 줄을 눌렀을 때 물결 효과가 배경 위에 보인다
+    return Material(
+      color: _agreed ? AppColors.primarySoft : AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        side: BorderSide(color: _agreed ? AppColors.primary : AppColors.lineStrong, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CheckboxListTile(
+            value: _agreed,
+            onChanged: (v) => setState(() => _agreed = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            title: const Text(
+              '[필수] 이용약관과 개인정보 수집·이용에 동의합니다',
+              style: TextStyle(fontSize: AppTextSize.body, fontWeight: FontWeight.w600),
+            ),
+            subtitle: const Text(
+              '수집 항목: 이름, 휴대폰 번호, 이메일 주소\n이용 목적: 예약 확인 연락, 회원 식별\n보유 기간: 탈퇴할 때까지 (결제 기록은 법에 따라 5년)',
+              style: TextStyle(fontSize: AppTextSize.caption, color: AppColors.inkSub, height: 1.5),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.sm, bottom: AppSpacing.xs),
+            child: Wrap(
+              spacing: AppSpacing.xs,
+              children: [
+                TextButton(
+                  onPressed: () => openWebPage(context, AppConstants.termsUrl),
+                  child: const Text('이용약관 보기', style: TextStyle(decoration: TextDecoration.underline)),
+                ),
+                TextButton(
+                  onPressed: () => openWebPage(context, AppConstants.privacyUrl),
+                  child: const Text('개인정보처리방침 보기', style: TextStyle(decoration: TextDecoration.underline)),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

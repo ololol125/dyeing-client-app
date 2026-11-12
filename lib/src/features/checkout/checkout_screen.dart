@@ -4,7 +4,9 @@ import '../../core/messages.dart';
 import '../../core/theme.dart';
 import '../../models/reservation.dart';
 import '../../services/api_service.dart';
+import '../../services/auth_service.dart';
 import '../../widgets/app_widgets.dart';
+import '../auth/require_login.dart';
 
 // 예약(Reservation) 데이터와 연결된 결제(payment) 상태를 결제 내역/영수증 형태로 재구성해 보여준다.
 class CheckoutScreen extends StatefulWidget {
@@ -17,6 +19,7 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   List<Reservation> _receipts = [];
   bool _isLoading = true;
+  bool _loggedIn = true;
   String? _errorMessage;
 
   @override
@@ -30,6 +33,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _isLoading = true;
       _errorMessage = null;
     });
+
+    // 로그인하지 않았으면 서버에 묻지 않고 로그인 안내를 보여준다
+    if (!await AuthService.isLoggedIn()) {
+      if (mounted) {
+        setState(() {
+          _loggedIn = false;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+    _loggedIn = true;
 
     try {
       final reservations = await ApiService.getMyReservations();
@@ -49,6 +64,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       appBar: AppBar(title: const Text('결제 내역')),
       body: _isLoading
           ? const LoadingMessage(text: '결제 내역을 불러오는 중입니다')
+          : !_loggedIn
+          ? LoginPrompt(
+              title: '로그인하면 결제 내역을 볼 수 있어요',
+              message: '앱에서 결제하신 영수증을 모아서 보여 드려요.',
+              onLoggedIn: _loadReceipts,
+            )
           : _errorMessage != null
               ? StateMessage.error(message: _errorMessage!, onRetry: _loadReceipts)
               : _receipts.isEmpty

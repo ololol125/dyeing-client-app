@@ -7,6 +7,7 @@ import '../../models/post.dart';
 import '../../models/shop.dart';
 import '../../services/post_service.dart';
 import '../../widgets/app_widgets.dart';
+import '../auth/require_login.dart';
 import '../booking/booking_screen.dart';
 
 // 매장 상세 화면: 전화·길찾기를 가장 위에 크게 두고, 가격·영업시간·매장 소식을 보여준다.
@@ -123,7 +124,9 @@ class _ShopDetailScreenState extends State<ShopDetailScreen> {
         child: PrimaryButton(
           label: '예약하기',
           icon: Icons.event_available,
-          onPressed: () {
+          onPressed: () async {
+            // 매장 둘러보기는 로그인 없이, 예약할 때만 로그인 요청
+            if (!await ensureLoggedIn(context) || !context.mounted) return;
             Navigator.push(
               context,
               MaterialPageRoute(

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/constants.dart';
+import '../../core/links.dart';
 import '../../core/messages.dart';
 import '../../core/theme.dart';
 import '../../services/auth_service.dart';
@@ -40,10 +42,15 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-        (route) => false,
-      );
+      // 예약하기 등에서 열린 경우 원래 화면으로 돌아가고, 아니면 첫 화면으로
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop(true);
+      } else {
+        navigator.pushReplacement(
+          MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       showAppMessage(context, friendlyError(e));
@@ -55,6 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // 로그인 없이도 둘러볼 수 있도록 뒤로가기(닫기)를 항상 제공
+      appBar: AppBar(title: const Text('로그인')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -153,6 +162,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             },
                       child: const Text('회원가입 하기'),
                     ),
+                    const SizedBox(height: AppSpacing.xl),
+                    const LegalLinks(),
                   ],
                 ),
               ),
@@ -160,6 +171,29 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// 개인정보처리방침 · 이용약관 링크 (로그인·회원가입·내 정보 화면 공통)
+class LegalLinks extends StatelessWidget {
+  const LegalLinks({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: AppSpacing.sm,
+      children: [
+        TextButton(
+          onPressed: () => openWebPage(context, AppConstants.privacyUrl),
+          child: const Text('개인정보처리방침', style: TextStyle(decoration: TextDecoration.underline)),
+        ),
+        TextButton(
+          onPressed: () => openWebPage(context, AppConstants.termsUrl),
+          child: const Text('이용약관', style: TextStyle(decoration: TextDecoration.underline)),
+        ),
+      ],
     );
   }
 }

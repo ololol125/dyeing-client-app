@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'src/core/constants.dart';
 import 'src/core/theme.dart';
-import 'src/features/auth/login_screen.dart';
+import 'src/core/messages.dart';
 import 'src/features/main_navigation_screen.dart'; // 허브 파일 임포트
 import 'src/services/auth_service.dart';
 
@@ -26,17 +26,15 @@ void main() async {
     );
   }
 
-  // 토큰 만료로 세션이 끊기면 어느 화면에 있든 로그인 화면으로 이동
+  // 토큰 만료로 세션이 끊기면 첫 화면으로 돌아가 안내 (둘러보기는 로그인 없이 가능)
   AuthService.onSessionExpired = () {
     final navigator = navigatorKey.currentState;
     if (navigator == null) return;
     navigator.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
       (route) => false,
     );
-    ScaffoldMessenger.of(navigator.context).showSnackBar(
-      const SnackBar(content: Text('로그인이 만료되었습니다. 다시 로그인해 주세요.')),
-    );
+    showAppMessage(navigator.context, '로그인이 만료되었어요. 예약하시려면 다시 로그인해 주세요.');
   };
 
   runApp(const MainApp());
@@ -59,29 +57,8 @@ class MainApp extends StatelessWidget {
         maxScaleFactor: 1.6,
         child: child!,
       ),
-      home: const AuthGate(),
-    );
-  }
-}
-
-// 앱 시작 시 저장된 토큰 유무를 확인해 로그인 화면 또는 메인 화면으로 분기
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: AuthService.isLoggedIn(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return snapshot.data == true
-            ? const MainNavigationScreen()
-            : const LoginScreen();
-      },
+      // 매장 둘러보기는 로그인 없이 가능, 예약·내역 확인 때만 로그인 요청
+      home: const MainNavigationScreen(),
     );
   }
 }

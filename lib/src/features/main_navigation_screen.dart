@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'home/home_screen.dart';
 import 'checkout/checkout_screen.dart';
 import 'reservations/reservation_list_screen.dart';
+import 'account/my_info_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -20,6 +21,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     HomeScreen(),
     ReservationListScreen(),
     CheckoutScreen(),
+    MyInfoScreen(),
   ];
 
   @override
@@ -45,6 +47,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
             label: '결제 내역',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: '내 정보',
           ),
         ],
       ),

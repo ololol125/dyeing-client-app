@@ -132,7 +132,38 @@ class AuthService {
     }
   }
 
-  // 5. 로그아웃
+  // 5. 회원 탈퇴 (DELETE /v1/users/me): 성공하면 기기에 저장된 로그인 정보도 지운다
+  static Future<void> deleteAccount() async {
+    final token = await getToken();
+    final url = Uri.parse('${AppConstants.baseUrl}/v1/users/me');
+
+    final http.Response response;
+    try {
+      response = await http.delete(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      );
+    } on http.ClientException catch (e) {
+      throw Exception('탈퇴 처리 중 네트워크 오류가 발생했습니다: $e');
+    }
+
+    if (response.statusCode == 401) {
+      await expireSession();
+      throw Exception('로그인이 만료되었습니다. 다시 로그인한 뒤 탈퇴해 주세요.');
+    }
+
+    final Map<String, dynamic> decoded = json.decode(utf8.decode(response.bodyBytes));
+    if (response.statusCode == 200 && decoded['success'] == true) {
+      await logout();
+      return;
+    }
+    throw Exception(decoded['error'] ?? '탈퇴를 처리하지 못했습니다.');
+  }
+
+  // 6. 로그아웃
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);

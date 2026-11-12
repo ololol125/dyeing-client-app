@@ -3,6 +3,13 @@ class AppConstants {
   // 실제 배포된 서버 주소 또는 로컬 개발 서버 주소 입력
   static const String baseUrl = 'https://dyeing-shop-saas.vercel.app/api';
 
+  // 웹 안내 페이지 (개인정보처리방침·이용약관·탈퇴 안내)
+  static const String webBaseUrl = 'https://dyeing-shop-saas.vercel.app';
+  static const String privacyUrl = '$webBaseUrl/privacy';
+  static const String termsUrl = '$webBaseUrl/terms';
+  static const String accountDeletionUrl = '$webBaseUrl/account-deletion';
+  static const String supportPhone = '053-957-6388';
+
   // TODO: 네이버 클라우드 플랫폼 콘솔(Maps > Dynamic Map)에서 발급받은 Client ID로 교체
   static const String naverMapClientId = '7rp75a093t';
 
