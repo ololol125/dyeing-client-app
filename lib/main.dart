@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'src/core/constants.dart';
+import 'src/core/theme.dart';
 import 'src/features/auth/login_screen.dart';
 import 'src/features/main_navigation_screen.dart'; // 허브 파일 임포트
 import 'src/services/auth_service.dart';
@@ -52,9 +53,11 @@ class MainApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: '염색방 예약 시스템',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.indigo, // 구글 머티리얼3 디자인 기준 색상 설정
+      theme: AppTheme.light,
+      // 기기의 '글자 크게' 설정은 따르되, 화면이 깨지지 않도록 최대 1.6배로 제한
+      builder: (context, child) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.6,
+        child: child!,
       ),
       home: const AuthGate(),
     );
