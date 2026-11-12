@@ -1,11 +1,13 @@
 // lib/src/features/booking/booking_confirm_screen.dart
 import 'package:flutter/material.dart';
+import 'package:portone_flutter/v2.dart';
 import '../../models/designer.dart';
 import '../../models/shop.dart';
 import '../../services/api_service.dart';
+import '../payment/payment_screen.dart';
 
-// 예약 최종 확인 화면. 매장 방문 시 현장 결제를 전제로 하며,
-// 여기서는 예약 내용을 최종 검토하고 확정(서버에 예약 생성)하는 역할만 한다.
+// 예약 최종 확인 화면. 예약 내용을 검토하고 포트원으로 온라인 결제를 진행한다.
+// 결제가 서버에서 검증되면 예약이 확정된다 (결제 전에는 예약이 생성되지 않음).
 class BookingConfirmScreen extends StatefulWidget {
   final Shop shop;
   final Designer designer;
@@ -28,6 +30,7 @@ class BookingConfirmScreen extends StatefulWidget {
 
 class _BookingConfirmScreenState extends State<BookingConfirmScreen> {
   bool _isSubmitting = false;
+  String _payMethod = 'CARD'; // 'CARD' or 'KAKAOPAY'
 
   String get _menuLabel => widget.menuType == 'ROOT_DYE' ? '뿌리 염색' : '전체 염색';
 
@@ -110,7 +113,7 @@ class _BookingConfirmScreenState extends State<BookingConfirmScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    '결제 예정 금액',
+                    '결제 금액',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                   ),
                   Text(
@@ -124,9 +127,18 @@ class _BookingConfirmScreenState extends State<BookingConfirmScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+            const Text(
+              '결제 수단',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
+            _payMethodTile('CARD', Icons.credit_card, '신용·체크카드'),
+            const SizedBox(height: 8),
+            _payMethodTile('KAKAOPAY', Icons.chat_bubble, '카카오페이'),
+            const SizedBox(height: 12),
             Text(
-              '※ 결제는 온라인으로 진행되지 않으며, 예약된 매장 방문 시 현장에서 결제됩니다.',
+              '※ 결제가 완료되면 예약이 바로 확정됩니다.',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
@@ -156,7 +168,7 @@ class _BookingConfirmScreenState extends State<BookingConfirmScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onPressed: _isSubmitting ? null : _confirmAndSubmit,
+              onPressed: _isSubmitting ? null : _payAndConfirm,
               child: _isSubmitting
                   ? const SizedBox(
                       width: 20,
@@ -166,8 +178,8 @@ class _BookingConfirmScreenState extends State<BookingConfirmScreen> {
                         color: Colors.white,
                       ),
                     )
-                  : const Text(
-                      '예약 확정하기',
+                  : Text(
+                      '${widget.totalAmount}원 결제하기',
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
             ),
@@ -197,29 +209,88 @@ class _BookingConfirmScreenState extends State<BookingConfirmScreen> {
     );
   }
 
-  Future<void> _confirmAndSubmit() async {
+  Widget _payMethodTile(String value, IconData icon, String label) {
+    final selected = _payMethod == value;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: _isSubmitting ? null : () => setState(() => _payMethod = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: selected ? Colors.indigo : Colors.grey[300]!,
+            width: selected ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: selected ? Colors.indigo : Colors.grey[600]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              size: 20,
+              color: selected ? Colors.indigo : Colors.grey[400],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _payAndConfirm() async {
     setState(() => _isSubmitting = true);
 
-    final success = await ApiService.createReservation(
-      shopId: widget.shop.shopId,
-      designerId: widget.designer.designerId,
-      reservationTime: widget.reservationTime,
-      menuType: widget.menuType,
-      totalAmount: widget.totalAmount,
-    );
-
-    if (!mounted) return;
-    setState(() => _isSubmitting = false);
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('예약이 확정되었습니다!')),
+    try {
+      // 1. 서버에 결제 준비 요청 (금액 계산 + 포트원 사전 등록)
+      final session = await ApiService.preparePayment(
+        shopId: widget.shop.shopId,
+        designerId: widget.designer.designerId,
+        reservationTime: widget.reservationTime,
+        menuType: widget.menuType,
+        payMethod: _payMethod,
       );
+      if (!mounted) return;
+
+      // 2. 포트원 결제창 호출
+      final response = await Navigator.of(context).push<PaymentResponse>(
+        MaterialPageRoute(builder: (_) => PaymentScreen(session: session)),
+      );
+      if (!mounted) return;
+
+      if (response == null) {
+        _showMessage('결제가 취소되었습니다.');
+        return;
+      }
+      if (response.code != null) {
+        _showMessage(response.message ?? '결제에 실패했습니다.');
+        return;
+      }
+
+      // 3. 서버에서 결제 검증 후 예약 확정
+      await ApiService.completePayment(response.paymentId);
+      if (!mounted) return;
+
+      _showMessage('결제가 완료되어 예약이 확정되었습니다!');
       Navigator.of(context).popUntil((route) => route.isFirst);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('예약 신청에 실패했습니다. 다시 시도해 주세요.')),
-      );
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }

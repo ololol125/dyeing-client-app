@@ -5,4 +5,8 @@ class AppConstants {
 
   // TODO: 네이버 클라우드 플랫폼 콘솔(Maps > Dynamic Map)에서 발급받은 Client ID로 교체
   static const String naverMapClientId = '7rp75a093t';
+
+  // 카드사/간편결제 앱에서 결제 인증 후 이 앱으로 돌아오기 위한 URL scheme
+  // (AndroidManifest.xml intent-filter, iOS Info.plist CFBundleURLSchemes와 일치해야 함)
+  static const String portoneAppScheme = 'dyeingon';
 }

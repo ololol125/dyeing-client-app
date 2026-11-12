@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/reservation.dart';
 import '../../services/api_service.dart';
 
-// DB에 별도 결제 테이블이 없어, 예약(Reservation) 데이터를 결제 내역/영수증 형태로 재구성해 보여준다.
+// 예약(Reservation) 데이터와 연결된 결제(payment) 상태를 결제 내역/영수증 형태로 재구성해 보여준다.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({Key? key}) : super(key: key);
 
@@ -97,7 +97,9 @@ class _ReceiptCard extends StatelessWidget {
       case 'COMPLETED':
         return (label: '결제 완료', color: Colors.green);
       case 'CONFIRMED':
-        return (label: '결제 예정 (이용 전)', color: Colors.indigo);
+        return reservation.paymentStatus == 'PAID'
+            ? (label: '결제 완료 (이용 전)', color: Colors.indigo)
+            : (label: '현장 결제 예정', color: Colors.indigo);
       case 'CANCELLED':
         return (label: '취소됨', color: Colors.grey);
       case 'NOSHOW':

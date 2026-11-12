@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../core/constants.dart';
+import '../models/payment_session.dart';
 import '../models/reservation.dart';
 import 'auth_service.dart';
 
@@ -48,45 +49,67 @@ class ApiService {
     }
   }
 
-  // 2. 소비자의 새로운 미용실 예약 신청 (POST 연동)
-  static Future<bool> createReservation({
+  // 2. 결제 준비 (POST): 서버가 금액을 계산해 포트원에 사전 등록하고 결제창 호출 정보를 반환
+  static Future<PaymentSession> preparePayment({
     required int shopId,
     required int designerId,
     required DateTime reservationTime,
     required String menuType, // 'ROOT_DYE' or 'FULL_DYE'
-    required int totalAmount,
+    required String payMethod, // 'CARD' or 'KAKAOPAY'
     String? notes,
   }) async {
-    final url = Uri.parse('${AppConstants.baseUrl}/v1/reservations/client');
+    final url = Uri.parse('${AppConstants.baseUrl}/v1/payments/prepare');
 
-    // 백엔드 POST의 const { shopId, ... } = body; 명세와 정확히 일치하는 페이로드 구성
     final Map<String, dynamic> requestBody = {
       'shopId': shopId,
       'designerId': designerId,
       'reservationTime': reservationTime.toIso8601String(),
       'menuType': menuType,
-      'totalAmount': totalAmount,
+      'payMethod': payMethod,
       'notes': notes,
     };
 
+    final http.Response response;
     try {
-      final response = await http.post(
+      response = await http.post(
         url,
         headers: await _getHeaders(),
         body: json.encode(requestBody),
       );
-
-      if (response.statusCode == 201) {
-        final Map<String, dynamic> decodedResponse = json.decode(response.body);
-        return decodedResponse['success'] == true;
-      } else {
-        final Map<String, dynamic> errorResponse = json.decode(response.body);
-        print('🚨 예약 생성 실패 사유: ${errorResponse['error']}');
-        return false;
-      }
-    } catch (e) {
-      print('🚨 예약 생성 네트워크 에러: $e');
-      return false;
+    } on http.ClientException catch (e) {
+      throw Exception('결제 준비 중 네트워크 오류가 발생했습니다: $e');
     }
+
+    final Map<String, dynamic> decoded = json.decode(
+      utf8.decode(response.bodyBytes),
+    );
+    if (response.statusCode == 201 && decoded['success'] == true) {
+      return PaymentSession.fromJson(decoded['data']);
+    }
+    throw Exception(decoded['error'] ?? '결제를 준비하지 못했습니다.');
+  }
+
+  // 3. 결제 완료 처리 (POST): 서버가 포트원에서 결제를 검증한 뒤 예약을 확정
+  static Future<void> completePayment(String paymentId) async {
+    final url = Uri.parse('${AppConstants.baseUrl}/v1/payments/complete');
+
+    final http.Response response;
+    try {
+      response = await http.post(
+        url,
+        headers: await _getHeaders(),
+        body: json.encode({'paymentId': paymentId}),
+      );
+    } on http.ClientException catch (e) {
+      throw Exception('결제 확인 중 네트워크 오류가 발생했습니다: $e');
+    }
+
+    final Map<String, dynamic> decoded = json.decode(
+      utf8.decode(response.bodyBytes),
+    );
+    if (response.statusCode == 200 && decoded['success'] == true) {
+      return;
+    }
+    throw Exception(decoded['error'] ?? '결제를 확인하지 못했습니다.');
   }
 }

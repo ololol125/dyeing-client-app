@@ -8,6 +8,7 @@ class Reservation {
   final int totalAmount;
   final String status; // 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NOSHOW'
   final String? notes;
+  final String? paymentStatus; // 온라인 결제 상태 ('PAID' 등), 현장 결제 예약은 null
 
   // 백엔드 관계형 데이터(include) 매핑 필드
   final String shopName;
@@ -24,6 +25,7 @@ class Reservation {
     required this.totalAmount,
     required this.status,
     this.notes,
+    this.paymentStatus,
     required this.shopName,
     required this.baseAddress,
     required this.designerName,
@@ -47,6 +49,8 @@ class Reservation {
       dPos = designerInfo['position'] ?? '-';
     }
 
+    final paymentJson = json['payment'] as Map<String, dynamic>?;
+
     return Reservation(
       reservationId: json['reservationId'],
       shopId: json['shopId'],
@@ -56,6 +60,7 @@ class Reservation {
       totalAmount: json['totalAmount'],
       status: json['status'],
       notes: json['notes'],
+      paymentStatus: paymentJson?['status'],
       shopName: shopJson['shopName'] ?? '염색방',
       baseAddress: shopJson['baseAddress'] ?? '',
       designerName: dName,
